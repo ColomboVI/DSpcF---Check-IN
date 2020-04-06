@@ -1,0 +1,215 @@
+<!--
+/**************************************************************************\
+ * Copyright (C) 2018 by Synergic Partners                                 *
+ *                                                                         *
+ * author     : Borja Durán                                                *
+ * description:                                                            *
+ * - capa de presentacion para subir archivos a drive a utilizar 
+                    en el envio de convocatoria del mail del check-in      *
+ *                                                                         *
+ * TODO                                                                    *
+ * ====                                                                    *
+ * - codigo HTML que ejecutará el examinador de drive para subir ficheros  *
+ *   para ello seguirá un workflow indicado por la función nextAction      *
+ *   
+ * ----------------------------------------------------------------------- *
+ * This program is not free software; you can not : (a) copy or use the    *
+ * Software in any manner except as expressly permitted by SynergicPartners*
+ * (b) transfer, sell, rent, lease, lend, distribute, or sublicense the    *
+ * Software to any third party; (c)  reverse engineer, disassemble, or     *
+ * decompile the Software; (d) alter, modify, enhance or prepare any       * 
+ * derivative work from or of the Software; (e) redistribute it and/or     *
+ * modify it without prior, written approval from Synergic Partners.       *
+\***************************************************************************/
+
+//-->
+<!DOCTYPE html>
+<html>
+<head>
+  <link rel="stylesheet" href="https://ssl.gstatic.com/docs/script/css/add-ons.css">
+  <script>
+    // IMPORTANT: Replace the value for DEVELOPER_KEY with the API key obtained
+    // from the Google Developers Console.
+    var DEVELOPER_KEY = 'AIzaSyBuBGTYV97n7oqWhfeyDXxT5Qda1B1TKuQ';
+    var DIALOG_DIMENSIONS = {width: 600, height: 425};
+    var pickerApiLoaded = false;
+
+    /**
+     * Loads the Google Picker API.
+     */
+    function onApiLoad() {
+      gapi.load('picker', {'callback': function() {
+        pickerApiLoaded = true;
+      }});
+     }
+
+    /**
+     * Gets the user's OAuth 2.0 access token from the server-side script so that
+     * it can be passed to Picker. This technique keeps Picker from needing to
+     * show its own authorization dialog, but is only possible if the OAuth scope
+     * that Picker needs is available in Apps Script. Otherwise, your Picker code
+     * will need to declare its own OAuth scopes.
+     */
+    function getOAuthToken() {
+      google.script.run.withSuccessHandler(abrirExaminadorDrive)
+          .withFailureHandler(mostrarError).getOAuthToken();
+    }
+
+    /**
+     * Creates a Picker that can access the user's spreadsheets. This function
+     * uses advanced options to hide the Picker's left navigation panel and
+     * default title bar.
+     *
+     * @param {string} token An OAuth 2.0 access token that lets Picker access the
+     *     file type specified in the addView call.
+     */
+     //var uploadView = new google.picker.DocsUploadView();
+    function abrirExaminadorDrive(token) {
+      if (pickerApiLoaded && token) {
+      
+      /*
+       var view = new google.picker.View(google.picker.ViewId.DOCS);
+        //view.setMimeTypes("image/png,image/jpeg,image/jpg");
+        var picker1 = new google.picker.PickerBuilder()
+            .enableFeature(google.picker.Feature.NAV_HIDDEN)
+            .hideTitleBar()
+            .enableFeature(google.picker.Feature.MULTISELECT_ENABLED)
+            .setOAuthToken(token)
+            .setOrigin(google.script.host.origin) 
+            .addView(view)
+            .addView(new google.picker.DocsUploadView())
+            .setDeveloperKey(DEVELOPER_KEY)
+            .setCallback(pickerCallback)
+            // Instruct Picker to fill the dialog, minus 2 pixels for the border.
+            .setSize(DIALOG_DIMENSIONS.width - 2,
+                DIALOG_DIMENSIONS.height - 2)
+            .build();
+      */
+      
+        var picker = new google.picker.PickerBuilder()
+            // Instruct Picker to display only spreadsheets in Drive. For other
+            // views, see https://developers.google.com/picker/docs/#otherviews
+            //.addView(google.picker.ViewId.DOCS)//google.picker.ViewId.SPREADSHEETS)
+            
+            
+        //.addView(google.picker.ViewId.RECENTLY_PICKED)
+            
+            .addView(new google.picker.DocsUploadView())
+            
+            // Hide the navigation panel so that Picker fills more of the dialog.
+            .enableFeature(google.picker.Feature.NAV_HIDDEN)
+            // Hide the title bar since an Apps Script dialog already has a title.
+            .hideTitleBar()
+            .setLocale('es')
+            .setOAuthToken(token)
+            .setDeveloperKey(DEVELOPER_KEY)
+            .setCallback(notificarArchivoSeleccionado)
+            .setOrigin(google.script.host.origin) 
+            // Instruct Picker to fill the dialog, minus 2 pixels for the border.
+            .setSize(DIALOG_DIMENSIONS.width - 2,
+                DIALOG_DIMENSIONS.height - 2)
+            .build();
+            
+            
+        picker.setVisible(true);
+      } else {
+        mostrarError('Unable to load the file picker.');
+      }
+    }
+
+    /**
+     * A callback function that extracts the chosen document's metadata from the
+     * response object. For details on the response object, see
+     * https://developers.google.com/picker/docs/result
+     *
+     * @param {object} data The response object.
+     */
+    function notificarArchivoSeleccionado(data)
+    {
+      var action = data[google.picker.Response.ACTION];
+      if (action == google.picker.Action.PICKED) {
+        var doc = data[google.picker.Response.DOCUMENTS][0];
+        var id = doc[google.picker.Document.ID];
+        var url = doc[google.picker.Document.URL];
+        var title = doc[google.picker.Document.NAME];
+            
+        
+        document.getElementById('result').innerHTML =
+            '<b>Has subido el siguiente fichero:</b><br>Nombre: <a target="_blank" href="' + url + '">' + title ;
+        document.getElementById('result').style.display = "inherit";
+        document.getElementById('subir_btn').value="salvando....";
+        document.getElementById('subir_btn').disabled=true;
+        
+        google.script.run.withSuccessHandler(
+              function (){
+                document.getElementById('subir_btn').disabled=false;
+                document.getElementById('subir_btn').value="Subir un fichero";
+                document.getElementById('continuar').style.display = "inherit";
+              })
+          .withFailureHandler(mostrarError).salvarArchivoTemporal(id);
+        
+        
+      } else if (action == google.picker.Action.CANCEL) {
+        //document.getElementById('result').innerHTML = 'Picker canceled.';
+      }
+    }
+    
+
+    function mostrarError(message) {
+        document.getElementById('result').innerHTML = 'Error: ' + message;
+        document.getElementById('result').style.display = "inherit";
+        document.getElementById('continuar').style.display = "none";
+        document.getElementById('subir_btn').style.display = "none";
+    }
+
+    function obtenerSiguienteTareaFlujo()
+    {
+          document.getElementById('titulo').innerHTML = 'Cargando la siguiente pantalla de acción del workflow...';
+          document.getElementById('continuar').style.display = "none";
+          document.getElementById('subir_btn').style.display = "none";
+          document.getElementById('result').style.display = "none";
+          google.script.run.withSuccessHandler(mostrarPantallaAccion)
+          .withFailureHandler(mostrarError).nextAccion();
+    }
+    
+    function mostrarPantallaAccion(tarea)
+    {
+        if (tarea && tarea.fichero_pendiente)
+        {
+          document.getElementById('titulo').innerHTML = 'Tienes que subir el fichero correspondiente a '+tarea.fichero_pendiente;
+          document.getElementById('subir_btn').style.display='inherit';
+          document.getElementById('continuar').style.display = "none";
+          document.getElementById('result').style.display = "none";
+        }
+        else if (tarea && tarea.generando_comunicaciones)
+        {
+          document.getElementById('titulo').innerHTML = 'Se están generando las comunicaciones, manténgase a la espera...';
+          document.getElementById('continuar').style.display = "none";
+          document.getElementById('subir_btn').style.display = "none";
+          document.getElementById('result').style.display = "none";
+          google.script.run.withSuccessHandler(mostrarPantallaAccion)
+          .withFailureHandler(mostrarError).mandarConvocatoria();
+        }
+        else //fin del workflow
+        {
+          document.getElementById('titulo').innerHTML = 'La carga de ficheros ha sido satisfactoria y se han enviado los mails de convocatoria';
+          document.getElementById('continuar').style.display = "none";
+          document.getElementById('subir_btn').style.display = "none";
+          document.getElementById('result').style.display = "none";
+        }
+    }
+
+    
+  </script>
+</head>
+<body onload="javascript:obtenerSiguienteTareaFlujo();">
+  <div>
+    
+    <p id='titulo'>Cargando....</p>
+    <button id='subir_btn' onclick='getOAuthToken()' style="display:none;">Subir un fichero</button>
+    <p id='result'></p>
+    <button id="continuar" onclick="javascript:obtenerSiguienteTareaFlujo();" style="display:none;">Confirmar fichero</button>
+  </div>
+  <script src="https://apis.google.com/js/api.js?onload=onApiLoad"></script>
+</body>
+</html>
